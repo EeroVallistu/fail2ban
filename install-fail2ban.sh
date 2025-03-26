@@ -110,7 +110,13 @@ maxretry = 5
 banaction = $(if $FIREWALL_INSTALLED; then echo "iptables-multiport"; else echo "iptables-multiport"; fi)
 # Using systemd backend explicitly for Debian 12
 backend = systemd
+EOL
 
+# Create SSH jail configuration in jail.d directory
+echo "Creating SSH jail configuration..."
+mkdir -p /etc/fail2ban/jail.d
+cat > /etc/fail2ban/jail.d/sshd.conf << EOL
+# SSH settings - will override jail.conf
 [sshd]
 enabled = true
 port = ssh
@@ -118,7 +124,7 @@ filter = sshd
 # Use both potential log paths to ensure coverage
 logpath = /var/log/auth.log
          /var/log/secure
-# No maxretry here - will use the default value
+maxretry = 5
 findtime = 5m
 EOL
 
@@ -148,32 +154,20 @@ if [[ "$enhance_security" =~ ^[Yy]$ ]]; then
         ban_action="iptables-allports"
     fi
     
-    # Configure email notifications
-    read -p "Do you want to enable email notifications? (y/n): " email_notify
-    if [[ "$email_notify" =~ ^[Yy]$ ]]; then
-        read -p "Enter destination email address: " dest_email
-        read -p "Enter sender email address: " sender_email
-        
-        # Add email configuration
-        cat >> /etc/fail2ban/jail.local << EOL
-destemail = $dest_email
-sender = $sender_email
-mta = sendmail
-action = %(action_mwl)s
-EOL
-    fi
-    
-    # Update configuration with enhanced settings
+    # Update global configuration with enhanced settings
     sed -i "s/bantime = .*/bantime = $ban_time/" /etc/fail2ban/jail.local
     sed -i "s/findtime = .*/findtime = $find_time/" /etc/fail2ban/jail.local
     sed -i "s/maxretry = 5/maxretry = $max_retry/" /etc/fail2ban/jail.local
     sed -i "s/banaction = .*/banaction = $ban_action/" /etc/fail2ban/jail.local
     
+    # Update the standard SSH configuration
+    sed -i "s/maxretry = 5/maxretry = $max_retry/" /etc/fail2ban/jail.d/sshd.conf
+    sed -i "s/findtime = 5m/findtime = $find_time/" /etc/fail2ban/jail.d/sshd.conf
+    
     # Always set SSH to stricter settings with max 1 retry
     echo "Setting SSH to stricter security (max 1 retry)..."
-    mkdir -p /etc/fail2ban/jail.d
     cat > /etc/fail2ban/jail.d/sshd-strict.conf << EOL
-# SSH stricter settings - will override jail.local
+# SSH stricter settings - will override sshd.conf
 [sshd]
 maxretry = 1
 findtime = 1m
