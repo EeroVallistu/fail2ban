@@ -162,13 +162,13 @@ if [[ "$enhance_security" =~ ^[Yy]$ ]]; then
     sed -i "s/maxretry = 5/maxretry = $max_retry/" /etc/fail2ban/jail.d/sshd.conf
     sed -i "s/findtime = 10m/findtime = $find_time/" /etc/fail2ban/jail.d/sshd.conf
     sed -i "s/bantime = 10m/bantime = $ban_time/" /etc/fail2ban/jail.d/sshd.conf
-    
-    # Enable persistent bans by default
-    echo "Enabling persistent bans that survive restarts..."
-    apt install -y sqlite3
-    sed -i '/backend = auto/a dbfile = /var/lib/fail2ban/fail2ban.sqlite3' /etc/fail2ban/jail.local
-    sed -i 's/backend = auto/backend = systemd/' /etc/fail2ban/jail.local
 fi
+
+# Enable persistent bans by default
+echo "Enabling persistent bans that survive restarts..."
+apt install -y sqlite3
+sed -i '/backend = auto/a dbfile = /var/lib/fail2ban/fail2ban.sqlite3' /etc/fail2ban/jail.local
+sed -i 's/backend = auto/backend = systemd/' /etc/fail2ban/jail.local
 
 # Configure custom blocklist
 print_section "CUSTOM IP BLOCKLIST"
