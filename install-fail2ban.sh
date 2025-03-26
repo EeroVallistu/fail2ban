@@ -161,13 +161,11 @@ if [[ "$enhance_security" =~ ^[Yy]$ ]]; then
     sed -i "s/findtime = 10m/findtime = $find_time/" /etc/fail2ban/jail.d/sshd.conf
     sed -i "s/bantime = 10m/bantime = $ban_time/" /etc/fail2ban/jail.d/sshd.conf
     
-    # Persistent bans option
-    read -p "Enable persistent bans that survive restarts? (y/n): " persistent_bans
-    if [[ "$persistent_bans" =~ ^[Yy]$ ]]; then
-        apt install -y sqlite3
-        sed -i '/backend = auto/a dbfile = /var/lib/fail2ban/fail2ban.sqlite3' /etc/fail2ban/jail.local
-        sed -i 's/backend = auto/backend = systemd/' /etc/fail2ban/jail.local
-    fi
+    # Enable persistent bans by default
+    echo "Enabling persistent bans that survive restarts..."
+    apt install -y sqlite3
+    sed -i '/backend = auto/a dbfile = /var/lib/fail2ban/fail2ban.sqlite3' /etc/fail2ban/jail.local
+    sed -i 's/backend = auto/backend = systemd/' /etc/fail2ban/jail.local
 fi
 
 # Configure custom blocklist
