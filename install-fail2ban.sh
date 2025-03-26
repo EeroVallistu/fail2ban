@@ -118,7 +118,7 @@ filter = sshd
 # Use both potential log paths to ensure coverage
 logpath = /var/log/auth.log
          /var/log/secure
-maxretry = 3
+# No maxretry here - will use the default value
 findtime = 5m
 EOL
 
@@ -165,6 +165,16 @@ EOL
     sed -i "s/findtime = .*/findtime = $find_time/" /etc/fail2ban/jail.local
     sed -i "s/maxretry = 5/maxretry = $max_retry/" /etc/fail2ban/jail.local
     sed -i "s/banaction = .*/banaction = $ban_action/" /etc/fail2ban/jail.local
+    
+    # Always set SSH to stricter settings with max 1 retry
+    echo "Setting SSH to stricter security (max 1 retry)..."
+    mkdir -p /etc/fail2ban/jail.d
+    cat > /etc/fail2ban/jail.d/sshd-strict.conf << EOL
+# SSH stricter settings - will override jail.local
+[sshd]
+maxretry = 1
+findtime = 1m
+EOL
     
     # Persistent bans option
     read -p "Enable persistent bans that survive restarts? (y/n): " persistent_bans
@@ -309,90 +319,6 @@ if $FIREWALL_INSTALLED; then
     iptables -L -n | grep -i fail2ban
 fi
 
-# Add a testing option
-print_section "TESTING FAIL2BAN (OPTIONAL)"
-read -p "Do you want to test if fail2ban is working correctly? (y/n): " test_fail2ban
-if [[ "$test_fail2ban" =~ ^[Yy]$ ]]; then
-    echo "Running fail2ban testing routine..."
-    
-    # Check if netcat is installed, install if needed
-    if ! command -v nc &> /dev/null; then
-        apt install -y netcat
-    fi
-    
-    echo "This test will simulate failed SSH logins to trigger fail2ban."
-    echo "WARNING: This might temporarily ban your current IP if not in the ignoreip list."
-    read -p "Enter an IP address to test (or leave blank to skip): " test_ip
-    
-    if [ ! -z "$test_ip" ]; then
-        echo "Simulating failed logins from $test_ip..."
-        for i in {1..5}; do
-            # Append simulated failed login attempts to auth.log
-            echo "$(date) sshd[12345]: Failed password for invalid user testuser from $test_ip port 22 ssh2" >> /var/log/auth.log
-            echo "Simulated failed login $i/5"
-            sleep 1
-        done
-        
-        echo "Waiting for fail2ban to process the log entries..."
-        sleep 5
-        
-        # Check if the IP was banned
-        if fail2ban-client status sshd | grep -q "$test_ip"; then
-            echo "SUCCESS: fail2ban correctly banned the test IP address."
-            
-            # Verify the firewall is actually blocking the IP
-            if iptables -L -n | grep -q "$test_ip"; then
-                echo "SUCCESS: The firewall has added rules to block the IP."
-            else
-                echo "WARNING: fail2ban banned the IP but no firewall rule was created!"
-                echo "This means connections may still be allowed despite being 'banned'."
-                
-                # Suggest fixes
-                if ! $FIREWALL_INSTALLED; then
-                    echo "SOLUTION: Install a firewall (UFW recommended):"
-                    echo "apt install -y ufw && ufw allow ssh && ufw --force enable"
-                else
-                    echo "SOLUTION: Try reconfiguring fail2ban to use a different action:"
-                    echo "Edit /etc/fail2ban/jail.local and set: banaction = iptables-allports"
-                fi
-            fi
-        else
-            echo "WARNING: fail2ban did not ban the test IP address."
-            echo "Possible issues:"
-            echo "1. The log path might be incorrect"
-            echo "2. The test IP might be in your ignoreip list"
-            echo "3. The fail2ban service might need to be restarted"
-            
-            # Suggest fixes
-            read -p "Do you want to try to fix these issues? (y/n): " fix_issues
-            if [[ "$fix_issues" =~ ^[Yy]$ ]]; then
-                # Use more aggressive configuration
-                sed -i 's/maxretry = 3/maxretry = 2/' /etc/fail2ban/jail.local
-                sed -i 's/findtime = 5m/findtime = 1m/' /etc/fail2ban/jail.local
-                
-                # Force systemd backend
-                sed -i 's/backend = .*/backend = systemd/' /etc/fail2ban/jail.local
-                
-                # Restart the service
-                systemctl restart fail2ban
-                echo "Configuration updated and fail2ban restarted."
-                echo "Please try to test again or check logs with: journalctl -u fail2ban"
-            fi
-        fi
-        
-        # If a firewall is installed, verify the ban at that level
-        if $FIREWALL_INSTALLED; then
-            echo "Checking if the ban is enforced at the connection level..."
-            if command -v nc &> /dev/null; then
-                echo "Testing connection to SSH from test IP (should fail if ban is working)..."
-                echo "This is a simulation - not an actual connection test."
-            fi
-        fi
-    else
-        echo "Test skipped."
-    fi
-fi
-
 # Add troubleshooting information
 print_section "TROUBLESHOOTING INFORMATION"
 echo "If fail2ban is not working as expected, try these steps:"
@@ -405,6 +331,7 @@ echo "6. Increase verbosity: fail2ban-client set loglevel DEBUG"
 echo "7. Verify firewall is installed and active: ufw status or firewall-cmd --state"
 echo "8. Check if iptables rules are created: iptables -L -n | grep fail2ban"
 echo "9. For persistent rules, install a firewall manager: apt install -y ufw"
+echo "10. To quickly set SSH to 1 retry: echo 'maxretry = 1' >> /etc/fail2ban/jail.d/sshd-strict.local && systemctl restart fail2ban"
 
 print_section "INSTALLATION COMPLETE"
 echo "fail2ban installation and configuration completed."
