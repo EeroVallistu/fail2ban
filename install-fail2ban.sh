@@ -127,8 +127,11 @@ print_section "ENHANCED SECURITY SETTINGS"
 read -p "Do you want to configure enhanced security settings? (y/n): " enhance_security
 if [[ "$enhance_security" =~ ^[Yy]$ ]]; then
     # Increase ban time
-    read -p "Enter ban time (default: 1h, recommended for security: 24h): " ban_time
+    read -p "Enter ban time (default: 1h, recommended for security: 24h, use -1 for permanent bans): " ban_time
     ban_time=${ban_time:-1h}
+    if [ "$ban_time" = "-1" ]; then
+        echo "Note: You've selected permanent bans"
+    fi
     
     # Reduce retry attempts
     read -p "Enter maximum retry attempts (default: 5, recommended for security: 3): " max_retry
@@ -183,74 +186,6 @@ EOL
         sed -i '/backend = auto/a dbfile = /var/lib/fail2ban/fail2ban.sqlite3' /etc/fail2ban/jail.local
         sed -i 's/backend = auto/backend = systemd/' /etc/fail2ban/jail.local
     fi
-fi
-
-# Configure additional services to protect
-print_section "ADDITIONAL SERVICES PROTECTION"
-echo "Would you like to enable fail2ban protection for additional services?"
-
-# Check if Apache is installed
-if dpkg -l | grep -q apache2; then
-    read -p "Apache detected. Enable protection for Apache? (y/n): " protect_apache
-else
-    read -p "Enable protection for Apache (if installed)? (y/n): " protect_apache
-fi
-
-if [[ "$protect_apache" =~ ^[Yy]$ ]]; then
-    cat >> /etc/fail2ban/jail.local << EOL
-
-[apache-auth]
-enabled = true
-port = http,https
-filter = apache-auth
-logpath = /var/log/apache2/error.log
-maxretry = 3
-
-[apache-badbots]
-enabled = true
-port = http,https
-filter = apache-badbots
-logpath = /var/log/apache2/access.log
-maxretry = 2
-EOL
-fi
-
-# Check if Nginx is installed
-if dpkg -l | grep -q nginx; then
-    read -p "Nginx detected. Enable protection for Nginx? (y/n): " protect_nginx
-else
-    read -p "Enable protection for Nginx (if installed)? (y/n): " protect_nginx
-fi
-
-if [[ "$protect_nginx" =~ ^[Yy]$ ]]; then
-    cat >> /etc/fail2ban/jail.local << EOL
-
-[nginx-http-auth]
-enabled = true
-port = http,https
-filter = nginx-http-auth
-logpath = /var/log/nginx/error.log
-maxretry = 3
-EOL
-fi
-
-# Check if FTP servers are installed
-if dpkg -l | grep -q vsftpd; then
-    read -p "vsftpd detected. Enable protection for FTP? (y/n): " protect_ftp
-else
-    read -p "Enable protection for FTP (if installed)? (y/n): " protect_ftp
-fi
-
-if [[ "$protect_ftp" =~ ^[Yy]$ ]]; then
-    cat >> /etc/fail2ban/jail.local << EOL
-
-[vsftpd]
-enabled = true
-port = ftp,ftp-data,ftps,ftps-data
-filter = vsftpd
-logpath = /var/log/vsftpd.log
-maxretry = 3
-EOL
 fi
 
 # Configure custom blocklist
@@ -319,20 +254,6 @@ if $FIREWALL_INSTALLED; then
     iptables -L -n | grep -i fail2ban
 fi
 
-# Add troubleshooting information
-print_section "TROUBLESHOOTING INFORMATION"
-echo "If fail2ban is not working as expected, try these steps:"
-echo "1. Check fail2ban logs: journalctl -u fail2ban"
-echo "2. Verify SSH log paths: grep sshd /var/log/auth.log or /var/log/secure"
-echo "3. Verify your IP is not in the ignoreip list"
-echo "4. Ensure fail2ban is running: systemctl status fail2ban"
-echo "5. Check active bans: fail2ban-client status sshd"
-echo "6. Increase verbosity: fail2ban-client set loglevel DEBUG"
-echo "7. Verify firewall is installed and active: ufw status or firewall-cmd --state"
-echo "8. Check if iptables rules are created: iptables -L -n | grep fail2ban"
-echo "9. For persistent rules, install a firewall manager: apt install -y ufw"
-echo "10. To quickly set SSH to 1 retry: echo 'maxretry = 1' >> /etc/fail2ban/jail.d/sshd-strict.local && systemctl restart fail2ban"
-
 print_section "INSTALLATION COMPLETE"
 echo "fail2ban installation and configuration completed."
 echo "You can check the status with: sudo systemctl status fail2ban"
@@ -340,5 +261,6 @@ echo "You can view all jails with: sudo fail2ban-client status"
 echo "You can view a specific jail with: sudo fail2ban-client status <jail_name>"
 echo "To manually ban an IP: sudo fail2ban-client set <jail_name> banip <ip>"
 echo "To manually unban an IP: sudo fail2ban-client set <jail_name> unbanip <ip>"
+echo "Note: Setting bantime to -1 will make bans permanent"
 
 exit 0
