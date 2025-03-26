@@ -152,7 +152,8 @@ if [[ "$enhance_security" =~ ^[Yy]$ ]]; then
     find_time=${find_time:-10m}
     
     # Use more aggressive banning action
-    read -p "Use more aggressive ban action? This will ban all ports, not just the one being attacked. (y/n): " aggressive_ban
+    read -p "Use more aggressive ban action? This will ban all ports, not just the one being attacked. (y/N): " aggressive_ban
+    aggressive_ban=${aggressive_ban:-n}
     ban_action="iptables-multiport"
     if [[ "$aggressive_ban" =~ ^[Yy]$ ]]; then
         ban_action="iptables-allports"
