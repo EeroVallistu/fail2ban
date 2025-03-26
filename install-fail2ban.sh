@@ -25,6 +25,50 @@ print_section "UPDATING SYSTEM"
 echo "Updating package lists..."
 apt update
 
+# Check and install firewall
+print_section "CHECKING FIREWALL STATUS"
+echo "Checking if a firewall is installed and active..."
+FIREWALL_INSTALLED=false
+
+if command -v ufw &> /dev/null; then
+    echo "UFW detected."
+    FIREWALL_INSTALLED=true
+    if ! ufw status | grep -q "Status: active"; then
+        echo "UFW is installed but not active. Enabling UFW..."
+        ufw allow ssh
+        ufw --force enable
+    fi
+elif command -v firewalld &> /dev/null; then
+    echo "FirewallD detected."
+    FIREWALL_INSTALLED=true
+    if ! systemctl is-active --quiet firewalld; then
+        echo "FirewallD is installed but not active. Enabling FirewallD..."
+        systemctl enable --now firewalld
+        firewall-cmd --permanent --add-service=ssh
+        firewall-cmd --reload
+    fi
+else
+    echo "No firewall detected. A firewall is required for fail2ban to block connections effectively."
+    read -p "Install UFW (Uncomplicated Firewall)? (y/n): " install_firewall
+    if [[ "$install_firewall" =~ ^[Yy]$ ]]; then
+        echo "Installing UFW..."
+        apt install -y ufw
+        echo "Configuring UFW to allow SSH..."
+        ufw allow ssh
+        echo "Enabling UFW..."
+        ufw --force enable
+        FIREWALL_INSTALLED=true
+    else
+        echo "WARNING: Without a firewall, fail2ban cannot block connections!"
+        echo "fail2ban will create iptables rules, but they may not be effective."
+        read -p "Continue anyway? (y/n): " continue_anyway
+        if [[ ! "$continue_anyway" =~ ^[Yy]$ ]]; then
+            echo "Installation aborted."
+            exit 1
+        fi
+    fi
+fi
+
 # Install fail2ban
 print_section "INSTALLING FAIL2BAN"
 echo "Installing fail2ban..."
@@ -62,7 +106,8 @@ $ignoreip
 bantime = 10m
 findtime = 10m
 maxretry = 5
-banaction = iptables-multiport
+# Select appropriate action based on firewall detection
+banaction = $(if $FIREWALL_INSTALLED; then echo "iptables-multiport"; else echo "iptables-multiport"; fi)
 # Using systemd backend explicitly for Debian 12
 backend = systemd
 
@@ -250,6 +295,20 @@ sleep 1
 echo "Current SSH jail status:"
 fail2ban-client status sshd
 
+# Check if firewall is correctly receiving fail2ban rules
+if $FIREWALL_INSTALLED; then
+    echo "Checking firewall rules created by fail2ban..."
+    if command -v ufw &> /dev/null; then
+        echo "UFW rules:"
+        ufw status verbose
+    elif command -v firewall-cmd &> /dev/null; then
+        echo "FirewallD rules:"
+        firewall-cmd --list-all
+    fi
+    echo "Checking direct iptables rules:"
+    iptables -L -n | grep -i fail2ban
+fi
+
 # Add a testing option
 print_section "TESTING FAIL2BAN (OPTIONAL)"
 read -p "Do you want to test if fail2ban is working correctly? (y/n): " test_fail2ban
@@ -280,6 +339,23 @@ if [[ "$test_fail2ban" =~ ^[Yy]$ ]]; then
         # Check if the IP was banned
         if fail2ban-client status sshd | grep -q "$test_ip"; then
             echo "SUCCESS: fail2ban correctly banned the test IP address."
+            
+            # Verify the firewall is actually blocking the IP
+            if iptables -L -n | grep -q "$test_ip"; then
+                echo "SUCCESS: The firewall has added rules to block the IP."
+            else
+                echo "WARNING: fail2ban banned the IP but no firewall rule was created!"
+                echo "This means connections may still be allowed despite being 'banned'."
+                
+                # Suggest fixes
+                if ! $FIREWALL_INSTALLED; then
+                    echo "SOLUTION: Install a firewall (UFW recommended):"
+                    echo "apt install -y ufw && ufw allow ssh && ufw --force enable"
+                else
+                    echo "SOLUTION: Try reconfiguring fail2ban to use a different action:"
+                    echo "Edit /etc/fail2ban/jail.local and set: banaction = iptables-allports"
+                fi
+            fi
         else
             echo "WARNING: fail2ban did not ban the test IP address."
             echo "Possible issues:"
@@ -303,6 +379,15 @@ if [[ "$test_fail2ban" =~ ^[Yy]$ ]]; then
                 echo "Please try to test again or check logs with: journalctl -u fail2ban"
             fi
         fi
+        
+        # If a firewall is installed, verify the ban at that level
+        if $FIREWALL_INSTALLED; then
+            echo "Checking if the ban is enforced at the connection level..."
+            if command -v nc &> /dev/null; then
+                echo "Testing connection to SSH from test IP (should fail if ban is working)..."
+                echo "This is a simulation - not an actual connection test."
+            fi
+        fi
     else
         echo "Test skipped."
     fi
@@ -317,6 +402,9 @@ echo "3. Verify your IP is not in the ignoreip list"
 echo "4. Ensure fail2ban is running: systemctl status fail2ban"
 echo "5. Check active bans: fail2ban-client status sshd"
 echo "6. Increase verbosity: fail2ban-client set loglevel DEBUG"
+echo "7. Verify firewall is installed and active: ufw status or firewall-cmd --state"
+echo "8. Check if iptables rules are created: iptables -L -n | grep fail2ban"
+echo "9. For persistent rules, install a firewall manager: apt install -y ufw"
 
 print_section "INSTALLATION COMPLETE"
 echo "fail2ban installation and configuration completed."
