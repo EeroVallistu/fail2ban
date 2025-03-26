@@ -63,14 +63,18 @@ bantime = 10m
 findtime = 10m
 maxretry = 5
 banaction = iptables-multiport
-backend = auto
+# Using systemd backend explicitly for Debian 12
+backend = systemd
 
 [sshd]
 enabled = true
 port = ssh
 filter = sshd
+# Use both potential log paths to ensure coverage
 logpath = /var/log/auth.log
+         /var/log/secure
 maxretry = 3
+findtime = 5m
 EOL
 
 # Ask for enhanced security
@@ -231,6 +235,88 @@ print_section "ACTIVATING FAIL2BAN"
 echo "Enabling and starting fail2ban service..."
 systemctl enable fail2ban
 systemctl restart fail2ban
+
+# Add a verification step before completion
+print_section "VERIFYING CONFIGURATION"
+echo "Checking if fail2ban is properly configured and running..."
+sleep 2
+
+# Reload the service to ensure changes take effect
+echo "Reloading fail2ban configuration..."
+fail2ban-client reload
+sleep 1
+
+# Display the status of the sshd jail specifically
+echo "Current SSH jail status:"
+fail2ban-client status sshd
+
+# Add a testing option
+print_section "TESTING FAIL2BAN (OPTIONAL)"
+read -p "Do you want to test if fail2ban is working correctly? (y/n): " test_fail2ban
+if [[ "$test_fail2ban" =~ ^[Yy]$ ]]; then
+    echo "Running fail2ban testing routine..."
+    
+    # Check if netcat is installed, install if needed
+    if ! command -v nc &> /dev/null; then
+        apt install -y netcat
+    fi
+    
+    echo "This test will simulate failed SSH logins to trigger fail2ban."
+    echo "WARNING: This might temporarily ban your current IP if not in the ignoreip list."
+    read -p "Enter an IP address to test (or leave blank to skip): " test_ip
+    
+    if [ ! -z "$test_ip" ]; then
+        echo "Simulating failed logins from $test_ip..."
+        for i in {1..5}; do
+            # Append simulated failed login attempts to auth.log
+            echo "$(date) sshd[12345]: Failed password for invalid user testuser from $test_ip port 22 ssh2" >> /var/log/auth.log
+            echo "Simulated failed login $i/5"
+            sleep 1
+        done
+        
+        echo "Waiting for fail2ban to process the log entries..."
+        sleep 5
+        
+        # Check if the IP was banned
+        if fail2ban-client status sshd | grep -q "$test_ip"; then
+            echo "SUCCESS: fail2ban correctly banned the test IP address."
+        else
+            echo "WARNING: fail2ban did not ban the test IP address."
+            echo "Possible issues:"
+            echo "1. The log path might be incorrect"
+            echo "2. The test IP might be in your ignoreip list"
+            echo "3. The fail2ban service might need to be restarted"
+            
+            # Suggest fixes
+            read -p "Do you want to try to fix these issues? (y/n): " fix_issues
+            if [[ "$fix_issues" =~ ^[Yy]$ ]]; then
+                # Use more aggressive configuration
+                sed -i 's/maxretry = 3/maxretry = 2/' /etc/fail2ban/jail.local
+                sed -i 's/findtime = 5m/findtime = 1m/' /etc/fail2ban/jail.local
+                
+                # Force systemd backend
+                sed -i 's/backend = .*/backend = systemd/' /etc/fail2ban/jail.local
+                
+                # Restart the service
+                systemctl restart fail2ban
+                echo "Configuration updated and fail2ban restarted."
+                echo "Please try to test again or check logs with: journalctl -u fail2ban"
+            fi
+        fi
+    else
+        echo "Test skipped."
+    fi
+fi
+
+# Add troubleshooting information
+print_section "TROUBLESHOOTING INFORMATION"
+echo "If fail2ban is not working as expected, try these steps:"
+echo "1. Check fail2ban logs: journalctl -u fail2ban"
+echo "2. Verify SSH log paths: grep sshd /var/log/auth.log or /var/log/secure"
+echo "3. Verify your IP is not in the ignoreip list"
+echo "4. Ensure fail2ban is running: systemctl status fail2ban"
+echo "5. Check active bans: fail2ban-client status sshd"
+echo "6. Increase verbosity: fail2ban-client set loglevel DEBUG"
 
 print_section "INSTALLATION COMPLETE"
 echo "fail2ban installation and configuration completed."
