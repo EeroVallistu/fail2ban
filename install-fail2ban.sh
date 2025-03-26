@@ -49,7 +49,8 @@ elif command -v firewalld &> /dev/null; then
     fi
 else
     echo "No firewall detected. A firewall is required for fail2ban to block connections effectively."
-    read -p "Install UFW (Uncomplicated Firewall)? (y/n): " install_firewall
+    read -p "Install UFW (Uncomplicated Firewall)? (Y/n): " install_firewall
+    install_firewall=${install_firewall:-y}
     if [[ "$install_firewall" =~ ^[Yy]$ ]]; then
         echo "Installing UFW..."
         apt install -y ufw
