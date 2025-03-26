@@ -88,7 +88,8 @@ echo > /etc/fail2ban/jail.local
 
 # Configure trusted IPs
 print_section "CONFIGURING TRUSTED IPs"
-read -p "Do you want to specify trusted IPs that fail2ban should ignore? (y/n): " configure_trusted
+read -p "Do you want to specify trusted IPs that fail2ban should ignore? (y/N): " configure_trusted
+configure_trusted=${configure_trusted:-n}
 if [[ "$configure_trusted" =~ ^[Yy]$ ]]; then
     read -p "Enter trusted IPs separated by spaces (e.g. 127.0.0.1/8 192.168.1.0/24): " trusted_ips
     ignoreip="ignoreip = 127.0.0.1/8"
@@ -132,7 +133,8 @@ EOL
 
 # Ask for enhanced security
 print_section "ENHANCED SECURITY SETTINGS"
-read -p "Do you want to configure enhanced security settings? (y/n): " enhance_security
+read -p "Do you want to configure enhanced security settings? (y/N): " enhance_security
+enhance_security=${enhance_security:-n}
 if [[ "$enhance_security" =~ ^[Yy]$ ]]; then
     # Increase ban time
     read -p "Enter ban time (default: 1h, recommended for security: 24h, use -1 for permanent bans): " ban_time
@@ -170,7 +172,8 @@ fi
 
 # Configure custom blocklist
 print_section "CUSTOM IP BLOCKLIST"
-read -p "Do you want to configure a custom IP blocklist? (y/n): " custom_blocklist
+read -p "Do you want to configure a custom IP blocklist? (y/N): " custom_blocklist
+custom_blocklist=${custom_blocklist:-n}
 if [[ "$custom_blocklist" =~ ^[Yy]$ ]]; then
     read -p "Enter comma-separated IP addresses to always ban: " blocklist_ips
     if [ ! -z "$blocklist_ips" ]; then
