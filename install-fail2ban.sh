@@ -237,6 +237,8 @@ if $FIREWALL_INSTALLED; then
     iptables -L -n | grep -i fail2ban
 fi
 
+systemctl restart fail2ban
+
 print_section "INSTALLATION COMPLETE"
 echo "fail2ban installation and configuration completed."
 echo "You can check the status with: sudo systemctl status fail2ban"
