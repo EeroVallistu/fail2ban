@@ -125,7 +125,8 @@ filter = sshd
 logpath = /var/log/auth.log
          /var/log/secure
 maxretry = 5
-findtime = 5m
+findtime = 10m
+bantime = 10m
 EOL
 
 # Ask for enhanced security
@@ -162,7 +163,8 @@ if [[ "$enhance_security" =~ ^[Yy]$ ]]; then
     
     # Update the standard SSH configuration
     sed -i "s/maxretry = 5/maxretry = $max_retry/" /etc/fail2ban/jail.d/sshd.conf
-    sed -i "s/findtime = 5m/findtime = $find_time/" /etc/fail2ban/jail.d/sshd.conf
+    sed -i "s/findtime = 10m/findtime = $find_time/" /etc/fail2ban/jail.d/sshd.conf
+    sed -i "s/bantime = 10m/bantime = $ban_time/" /etc/fail2ban/jail.d/sshd.conf
     
     # Always set SSH to stricter settings with max 1 retry
     echo "Setting SSH to stricter security (max 1 retry)..."
