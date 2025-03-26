@@ -155,25 +155,10 @@ if [[ "$enhance_security" =~ ^[Yy]$ ]]; then
         ban_action="iptables-allports"
     fi
     
-    # Update global configuration with enhanced settings
-    sed -i "s/bantime = .*/bantime = $ban_time/" /etc/fail2ban/jail.local
-    sed -i "s/findtime = .*/findtime = $find_time/" /etc/fail2ban/jail.local
-    sed -i "s/maxretry = 5/maxretry = $max_retry/" /etc/fail2ban/jail.local
-    sed -i "s/banaction = .*/banaction = $ban_action/" /etc/fail2ban/jail.local
-    
     # Update the standard SSH configuration
     sed -i "s/maxretry = 5/maxretry = $max_retry/" /etc/fail2ban/jail.d/sshd.conf
     sed -i "s/findtime = 10m/findtime = $find_time/" /etc/fail2ban/jail.d/sshd.conf
     sed -i "s/bantime = 10m/bantime = $ban_time/" /etc/fail2ban/jail.d/sshd.conf
-    
-    # Always set SSH to stricter settings with max 1 retry
-    echo "Setting SSH to stricter security (max 1 retry)..."
-    cat > /etc/fail2ban/jail.d/sshd-strict.conf << EOL
-# SSH stricter settings - will override sshd.conf
-[sshd]
-maxretry = 1
-findtime = 1m
-EOL
     
     # Persistent bans option
     read -p "Enable persistent bans that survive restarts? (y/n): " persistent_bans
